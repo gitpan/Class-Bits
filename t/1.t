@@ -1,4 +1,4 @@
-use Test::More tests => 18;
+use Test::More tests => 20;
 BEGIN { use_ok('Class::Bits') };
 
 package Foo;
@@ -60,3 +60,8 @@ is ($o4->doz(4294967295), 65535, "4294967295 to u16 65535");
 
 is ($o4->doz(-1), 65535, "-1 to u16 65535");
 
+my @k=sort $o4->keys;
+
+is ($k[0], 'bar', 'keys bar');
+
+is ($k[3], 'foo', 'keys foo');

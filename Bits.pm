@@ -2,11 +2,11 @@ package Class::Bits;
 
 use 5.006;
 
-our $VERSION = '0.03';
+our $VERSION = '0.05';
 
 # use strict;
 use warnings::register;
-use warnings;
+use warnings ();
 
 use integer;
 
@@ -59,6 +59,7 @@ sub make_bits {
 	my $name=shift;
 	exists $names{$name} and
 	    croak "repeated name '$name'";
+	$names{$name}=1;
 
 	my $spec=shift;
 	$spec=~/^\s*([us]?)\s*(\d+)\s*$/ or
@@ -88,10 +89,10 @@ sub make_bits {
 		if (@_) {
 		    my $value=shift;
 		    if ($value > $max or $value < $min) {
-			if(warnings::enabled()) {
-			    my $ref=ref $this;
-			    croak "value $value for ${ref}::$name out of range [$min, $max]";
-			}
+			warnings::warn "value $value for "
+			    .ref($this)
+				."::$name out of range [$min, $max]"
+				    if warnings::enabled();
 		    }
 		    vec ($$this, $index, $size) = $value;
 		}
@@ -110,13 +111,13 @@ sub make_bits {
 		my $this=shift;
 		if (@_) {
 		    my $value=shift;
-		    # cluck "hello";
-		    if ($value > $max or $value < 0) {
-			if(warnings::enabled()) {
-			    my $ref=ref $this;
-			    croak "value $value for ${ref}::$name out of range [0, $max]";
-			}
+		    if (!defined($value)) {
+			warnings::warnif('uninitialized',
+					 "Uninitialized value passed to $name accessor");
+			$value=0;
 		    }
+		    warnings::warnif("value $value for ".ref($this)."::$name out of range [0, $max]")
+			    if ($value > $max or $value < 0);
 		    vec ($$this, $index, $size) = $value;
 		}
 		else {
@@ -135,7 +136,7 @@ sub make_bits {
 	}
 	else {
 	    $class=$ref;
-	    $string="\0" x ((7+$class->length) >> 3)
+	    $string="\0" x ((7+ $offset) >> 3)
 	}
 	
 	$string=shift if @_ & 1;
@@ -151,7 +152,17 @@ sub make_bits {
 	return $this;
     };
 
-    *{"${pkg}::length"}=sub { $offset };
+    *{"${pkg}::length"}=sub { $offset }
+	unless exists $names{lenght};
+
+    *{"${pkg}::keys"}=sub { keys %names }
+	unless exists $names{keys};
+
+    *{"${pkg}::as_hash"}=sub {
+	my $this=shift;
+	map { ($_, $this->$_ ) } keys %names
+    }
+	unless exists $names{as_hash};
 }
 
 
@@ -235,11 +246,23 @@ clones an object.
 
 gets or sets the value of the bit field C<$field> inside the bit vector.
 
-=item $class->length
+=item $class-E<gt>length
 
-=item $obj->lenght
+=item $obj-E<gt>lenght
 
 returns the size in bits of the bit vector used for storage.
+
+=item $class-E<gt>keys
+
+=item $obj-E<gt>keys
+
+returns an array with the names of the object attributes
+
+=item $obj-E<gt>as_hash
+
+returns a flatten hash with the object attributes, i.e.:
+
+  my %values=$obj->as_hash;
 
 =item %INDEX
 

@@ -1,5 +1,5 @@
-Class/Bits version 0.02
-=======================
+Class/Bits
+==========
 
 Class::Bits create class wrappers around bit vectors for easy access
 to the bit fields inside then.
