@@ -1,22 +1,16 @@
-# Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl 1.t'
-
-#########################
-
-# change 'tests => 1' to 'tests => last_test_to_print';
-
-use Test::More tests => 10;
+use Test::More tests => 18;
 BEGIN { use_ok('Class::Bits') };
-
-#########################
-
-# Insert your test code below, the Test::More module is use()ed here so read
-# its man page ( perldoc Test::More ) for help writing this test script.
 
 package Foo;
 
 use Class::Bits;
-make_bits(foo=>1, bar=>4, dor=> 2);
+make_bits(foo=>1, bar=>'s4', dor=> 2);
+
+package Bar;
+
+use Class::Bits;
+make_bits(foo=>32, doz=>16, bar=>'s32', dor=>'s16');
+
 
 package main;
 
@@ -31,16 +25,38 @@ is($obj->bar(3), 3, 'set to 3');
 
 is($obj->bar, 3, 'get 3');
 
-is($obj->bar(255), 15, 'set out of range');
+is($obj->bar(255), -1, 'set out of range');
 
 is($$obj, "\xf0\x00", 'as string');
+
 
 my $o2=Foo->new("\xf0\x01");
 
 is($o2->dor, 1, "init from string");
+
 
 my $o3=Foo->new(foo=>1, bar=>2, dor=>2);
 
 is($o3->bar, 2, "init from array");
 
 is($$o3, "\x21\x02", "as string 3");
+
+
+my $o4=Bar->new();
+
+is ($o4->foo(4294967295), 4294967295, "4294967295 to u32 4294967295");
+
+is ($o4->foo(-1), 4294967295, "-1 to u32 4294967295");
+
+is ($o4->bar(-1), -1, "-1 to s32 -1");
+
+is ($o4->bar(4294967295), -1, "4294967295 to s32 -1");
+
+is ($o4->dor(4294967295), -1, "4294967295 to s16 -1");
+
+is ($o4->dor(-1), -1, "-1 to s16 -1");
+
+is ($o4->doz(4294967295), 65535, "4294967295 to u16 65535");
+
+is ($o4->doz(-1), 65535, "-1 to u16 65535");
+

@@ -2,11 +2,13 @@ package Class::Bits;
 
 use 5.006;
 
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 # use strict;
 use warnings::register;
 use warnings;
+
+use integer;
 
 require Exporter;
 
@@ -14,13 +16,36 @@ our @ISA = qw(Exporter);
 our @EXPORT = qw(make_bits);
 
 use Carp;
+use Config;
 
-my %max = ( 1  => 1,
-	    2  => 3,
-	    4  => 15,
-	    8  => 255,
-	    16 => 65535,
-	    32 => 4294967295);
+use constant nvsize => $Config{nvsize}*8;
+
+my %umax = ( 1  => 1,
+	     2  => 3,
+	     4  => 15,
+	     8  => 255,
+	     16 => 65535,
+	     32 => 4294967295 );
+
+my %smax = ( 1  => 0,
+	     2  => 1,
+	     4  => 7,
+	     8  => 127,
+	     16 => 32767,
+	     32 => 2147483647 );
+
+my %smin = ( 1  => -1,
+	     2  => -2,
+	     4  => -8,
+	     8  => -128,
+	     16 => -32768,
+	     32 => -2147483648 );
+
+my %sext = map { $_ => (~$smax{$_}) } keys(%smax);
+
+my %signed = ( 's' => 1,
+               'u' => 0,
+               ''  => 0 );
 
 sub make_bits {
     @_ & 1 and
@@ -35,8 +60,13 @@ sub make_bits {
 	exists $names{$name} and
 	    croak "repeated name '$name'";
 
-	my $size=shift;
-	my $max=$max{$size} or
+	my $spec=shift;
+	$spec=~/^\s*([us]?)\s*(\d+)\s*$/ or
+	    croak "invalid Class::Bits specification '$spec' for '$name'";
+	my $sig=$signed{$1};
+	my $size=$2;
+
+	exists $smax{$size} or
 	    croak "invalid Class::Bits size '$size' for '$name'";
 
 	my $index=int(($offset+$size-1)/$size);
@@ -44,23 +74,56 @@ sub make_bits {
 
 	$pkg->{INDEX}{$name}=$index;
 	$pkg->{SIZE}{$name}=$size;
+	$pkg->{SIGNED}{$name}=$sig;
 
-	*{"${pkg}::$name"}=sub {
-	    my $this=shift;
-	    if (@_) {
-		my $value=shift;
-		if ($value > $max or $value < 0) {
-		    if(warnings::enabled()) {
-			my $ref=ref $this;
-			croak "value $value for ${ref}::$name out of range [0, $max]";
+	# warn "$name: index=>$index, size=>$size, sig=>$sig";
+
+	if ($sig) {
+	    my $max=$smax{$size};
+	    my $min=$smin{$size};
+	    my $ext=$sext{$size};
+
+	    *{"${pkg}::$name"}=sub {
+		my $this=shift;
+		if (@_) {
+		    my $value=shift;
+		    if ($value > $max or $value < $min) {
+			if(warnings::enabled()) {
+			    my $ref=ref $this;
+			    croak "value $value for ${ref}::$name out of range [$min, $max]";
+			}
 		    }
+		    vec ($$this, $index, $size) = $value;
 		}
-		vec ($$this, $index, $size) = $value;
+		my $value=vec ($$this, $index, $size);
+		if ($value & $ext) {
+		    return $ext|$value;
+		}
+		return $value;
 	    }
-	    else {
-		vec ($$this, $index, $size);
-	    }
-	};
+	}
+	else {
+
+	    my $max=$umax{$size};
+
+	    *{"${pkg}::$name"}=sub {
+		my $this=shift;
+		if (@_) {
+		    my $value=shift;
+		    # cluck "hello";
+		    if ($value > $max or $value < 0) {
+			if(warnings::enabled()) {
+			    my $ref=ref $this;
+			    croak "value $value for ${ref}::$name out of range [0, $max]";
+			}
+		    }
+		    vec ($$this, $index, $size) = $value;
+		}
+		else {
+		    vec ($$this, $index, $size);
+		}
+	    };
+	}
     }
 
     *{"${pkg}::new"}=sub {
@@ -109,6 +172,8 @@ Class::Bits - Class wrappers around bit vectors
              b => 1,  # 0..1
              c => 1,  # 0..1
              d => 2,  # 0..3
+             e => s4  # -8..7
+             f => s1  # -1..0
    );
 
    package;
@@ -130,8 +195,7 @@ L<Class::Bits> creates class wrappers around bit vectors.
 L<Class::Bits> defines classes using bit vectors as storage.
 
 Object attributes are stored in bit fields inside the bit vector. Bit
-field sizes have to be powers of two (1, 2, 4, 8, 16 or 32) and the
-values allowed are unsigned integers only.
+field sizes have to be powers of 2 (1, 2, 4, 8, 16 or 32).
 
 There is a class constructor subroutine:
 
@@ -141,6 +205,9 @@ There is a class constructor subroutine:
 
 exports in the calling package a ctor, accessor methods, some
 utility methods and some constants:
+
+Sizes can be prefixed by C<s> or C<u> to define signedness of the
+field. Default is unsigned.
 
 =over 4
 
@@ -159,7 +226,7 @@ C<%fields>.
 
 =item $obj-E<gt>new()
 
-clones a object.
+clones an object.
 
 
 =item $obj-E<gt>$field()
@@ -183,6 +250,10 @@ size).
 =item %SIZES
 
 hash with bit field sizes in bits.
+
+=item %SIGNED
+
+hash with signedness of the fields
 
 =back
 
@@ -222,3 +293,4 @@ This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
 
 =cut
+
